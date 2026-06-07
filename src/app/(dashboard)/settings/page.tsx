@@ -2,7 +2,7 @@
 
 import React, { useEffect, useState } from "react";
 import { motion } from "framer-motion";
-import { Settings as SettingsIcon, Save, Palette, Timer, Globe, Calendar } from "lucide-react";
+import { Settings as SettingsIcon, Save, Palette, Timer, Globe, Calendar, User } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
@@ -39,6 +39,9 @@ export default function SettingsPage() {
   const [timezone, setTimezone] = useState("UTC");
   const [defaultView, setDefaultView] = useState("month");
   const [clientName, setClientName] = useState("");
+  const [userName, setUserName] = useState("");
+  const [userEmail, setUserEmail] = useState("");
+  const [userPassword, setUserPassword] = useState("");
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
   const [saved, setSaved] = useState(false);
@@ -57,6 +60,8 @@ export default function SettingsPage() {
         setTimezone(data.settings.timezone);
         setDefaultView(data.settings.defaultView);
         setClientName(data.settings.clientName);
+        setUserName(data.settings.userName || "");
+        setUserEmail(data.settings.userEmail || "");
       }
     } catch (error) {
       console.error("Error:", error);
@@ -78,8 +83,12 @@ export default function SettingsPage() {
           timezone,
           defaultView,
           clientName,
+          userName,
+          userEmail,
+          userPassword: userPassword || undefined,
         }),
       });
+      setUserPassword("");
       setSaved(true);
       setTimeout(() => setSaved(false), 2000);
     } catch (error) {
@@ -115,6 +124,43 @@ export default function SettingsPage() {
           <Save className="w-3.5 h-3.5" />
           {saved ? "Saved!" : saving ? "Saving..." : "Save Changes"}
         </Button>
+      </div>
+
+      {/* User Profile */}
+      <div className="glass-card p-6 space-y-4">
+        <h3 className="text-sm font-semibold flex items-center gap-2">
+          <User className="w-4 h-4 text-[var(--color-accent)]" />
+          User Profile
+        </h3>
+        <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+          <div className="space-y-2">
+            <Label htmlFor="userName">Full Name</Label>
+            <Input
+              id="userName"
+              value={userName}
+              onChange={(e) => setUserName(e.target.value)}
+            />
+          </div>
+          <div className="space-y-2">
+            <Label htmlFor="userEmail">Email / Username</Label>
+            <Input
+              id="userEmail"
+              type="email"
+              value={userEmail}
+              onChange={(e) => setUserEmail(e.target.value)}
+            />
+          </div>
+        </div>
+        <div className="space-y-2">
+          <Label htmlFor="userPassword">Change Password</Label>
+          <Input
+            id="userPassword"
+            type="password"
+            placeholder="Leave blank to keep current password"
+            value={userPassword}
+            onChange={(e) => setUserPassword(e.target.value)}
+          />
+        </div>
       </div>
 
       {/* Client Info */}
