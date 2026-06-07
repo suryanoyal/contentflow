@@ -1,0 +1,246 @@
+// ContentFlow - Prisma Schema
+// PostgreSQL database schema for social media content management & scheduling
+
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+// ─── User ───────────────────────────────────────────────
+
+model User {
+  id            String    @id @default(cuid())
+  email         String    @unique
+  password      String
+  name          String
+  role          String      @default("VIEWER")
+  image         String?
+  createdAt     DateTime  @default(now())
+  updatedAt     DateTime  @updatedAt
+
+  client        Client?   @relation(fields: [clientId], references: [id], onDelete: Cascade)
+  clientId      String?
+
+  notifications Notification[]
+  activityLogs  ActivityLog[]
+  accounts      Account[]
+  sessions      Session[]
+
+  @@index([email])
+  @@index([clientId])
+}
+
+// ─── NextAuth Models ────────────────────────────────────
+
+model Account {
+  id                String  @id @default(cuid())
+  userId            String
+  type              String
+  provider          String
+  providerAccountId String
+  refresh_token     String? 
+  access_token      String? 
+  expires_at        Int?
+  token_type        String?
+  scope             String?
+  id_token          String? 
+  session_state     String?
+
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@unique([provider, providerAccountId])
+}
+
+model Session {
+  id           String   @id @default(cuid())
+  sessionToken String   @unique
+  userId       String
+  expires      DateTime
+
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+}
+
+model VerificationToken {
+  identifier String
+  token      String   @unique
+  expires    DateTime
+
+  @@unique([identifier, token])
+}
+
+// ─── Client (Brand) ────────────────────────────────────
+
+model Client {
+  id            String    @id @default(cuid())
+  name          String
+  logo          String?
+  cooldownDays  Int       @default(30)
+  accentColor   String    @default("#6366f1")
+  theme         String    @default("dark")
+  timezone      String    @default("UTC")
+  defaultView   String    @default("month")
+  createdAt     DateTime  @default(now())
+  updatedAt     DateTime  @updatedAt
+
+  users         User[]
+  platforms     Platform[]
+  contents      Content[]
+  schedules     Schedule[]
+  notifications Notification[]
+  activityLogs  ActivityLog[]
+
+  @@index([name])
+}
+
+// ─── Platform ───────────────────────────────────────────
+
+model Platform {
+  id            String    @id @default(cuid())
+  name          String
+  icon          String    @default("globe")
+  color         String    @default("#6366f1")
+  isActive      Boolean   @default(true)
+  isCustom      Boolean   @default(false)
+  createdAt     DateTime  @default(now())
+  updatedAt     DateTime  @updatedAt
+
+  client        Client    @relation(fields: [clientId], references: [id], onDelete: Cascade)
+  clientId      String
+
+  contentTypes  PlatformContentType[]
+  postingSlots  PostingSlot[]
+  schedules     Schedule[]
+
+  @@unique([clientId, name])
+  @@index([clientId])
+}
+
+// ─── Platform Content Type Rules ────────────────────────
+
+model PlatformContentType {
+  id            String      @id @default(cuid())
+  contentType   String
+  isAllowed     Boolean     @default(true)
+  allowedDays   String      @default("0,1,2,3,4,5,6")
+
+  platform      Platform    @relation(fields: [platformId], references: [id], onDelete: Cascade)
+  platformId    String
+
+  @@unique([platformId, contentType])
+}
+
+// ─── Posting Slot ───────────────────────────────────────
+
+model PostingSlot {
+  id            String    @id @default(cuid())
+  time          String    // HH:mm format
+  isActive      Boolean   @default(true)
+  createdAt     DateTime  @default(now())
+
+  platform      Platform  @relation(fields: [platformId], references: [id], onDelete: Cascade)
+  platformId    String
+
+  @@unique([platformId, time])
+  @@index([platformId])
+}
+
+// ─── Content ────────────────────────────────────────────
+
+model Content {
+  id                  String        @id @default(cuid())
+  contentId           String        @unique    // RX-MMSSST format
+  name                String
+  description         String?       
+  contentType   String
+  status              String @default("DRAFT")
+  usageCount          Int           @default(0)
+  lastPostedDate      DateTime?
+  lastPostedPlatform  String?
+  notes               String?       
+  createdAt           DateTime      @default(now())
+  updatedAt           DateTime      @updatedAt
+
+  client              Client        @relation(fields: [clientId], references: [id], onDelete: Cascade)
+  clientId            String
+
+  schedules           Schedule[]
+
+  @@index([clientId])
+  @@index([contentType])
+  @@index([status])
+  @@index([contentId])
+  @@index([clientId, contentType, status])
+}
+
+// ─── Schedule ───────────────────────────────────────────
+
+model Schedule {
+  id              String          @id @default(cuid())
+  scheduledDate   DateTime        
+  scheduledTime   String          // HH:mm format
+  status          String  @default("SCHEDULED")
+  createdAt       DateTime        @default(now())
+  updatedAt       DateTime        @updatedAt
+
+  content         Content         @relation(fields: [contentDbId], references: [id], onDelete: Cascade)
+  contentDbId     String
+
+  platform        Platform        @relation(fields: [platformId], references: [id], onDelete: Cascade)
+  platformId      String
+
+  client          Client          @relation(fields: [clientId], references: [id], onDelete: Cascade)
+  clientId        String
+
+  // CRITICAL: Prevent same content on the same day
+  @@unique([contentDbId, scheduledDate])
+  @@index([clientId])
+  @@index([scheduledDate])
+  @@index([platformId])
+  @@index([clientId, scheduledDate])
+  @@index([status])
+}
+
+// ─── Notification ───────────────────────────────────────
+
+model Notification {
+  id            String           @id @default(cuid())
+  type          String
+  title         String
+  message       String           
+  isRead        Boolean          @default(false)
+  createdAt     DateTime         @default(now())
+
+  user          User             @relation(fields: [userId], references: [id], onDelete: Cascade)
+  userId        String
+
+  client        Client           @relation(fields: [clientId], references: [id], onDelete: Cascade)
+  clientId      String
+
+  @@index([userId, isRead])
+  @@index([clientId])
+}
+
+// ─── Activity Log ───────────────────────────────────────
+
+model ActivityLog {
+  id            String    @id @default(cuid())
+  action        String
+  entityType    String
+  entityId      String?
+  metadata      String?
+  createdAt     DateTime  @default(now())
+
+  user          User      @relation(fields: [userId], references: [id], onDelete: Cascade)
+  userId        String
+
+  client        Client    @relation(fields: [clientId], references: [id], onDelete: Cascade)
+  clientId      String
+
+  @@index([clientId])
+  @@index([userId])
+  @@index([createdAt])
+}
