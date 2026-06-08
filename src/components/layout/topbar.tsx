@@ -36,7 +36,20 @@ export function Topbar() {
 
   const unreadCount = notifications.filter((n) => !n.isRead).length;
 
+  async function fetchNotifications() {
+    try {
+      const res = await fetch("/api/notifications");
+      if (res.ok) {
+        const data = await res.json();
+        setNotifications(data.notifications || []);
+      }
+    } catch {
+      // Silently fail
+    }
+  }
+
   useEffect(() => {
+    // eslint-disable-next-line react-hooks/set-state-in-effect
     fetchNotifications();
   }, []);
 
@@ -54,18 +67,6 @@ export function Topbar() {
     window.addEventListener("keydown", handleKeyDown);
     return () => window.removeEventListener("keydown", handleKeyDown);
   }, []);
-
-  async function fetchNotifications() {
-    try {
-      const res = await fetch("/api/notifications");
-      if (res.ok) {
-        const data = await res.json();
-        setNotifications(data.notifications || []);
-      }
-    } catch {
-      // Silently fail
-    }
-  }
 
   async function markAllRead() {
     try {

@@ -20,7 +20,7 @@ import {
   DialogTitle,
   DialogDescription,
 } from "@/components/ui/dialog";
-import { addDays, format } from "date-fns";
+import { addDays, format, startOfWeek, endOfWeek, addWeeks } from "date-fns";
 import { CalendarEvent } from "@/types";
 
 // Dynamically import FullCalendar to avoid SSR issues
@@ -92,14 +92,31 @@ export default function CalendarPage() {
     const now = new Date();
     const start = new Date(now.getFullYear(), now.getMonth(), 1);
     const end = new Date(now.getFullYear(), now.getMonth() + 2, 0);
+    // eslint-disable-next-line react-hooks/set-state-in-effect
     fetchSchedules(start.toISOString(), end.toISOString());
   }, [fetchSchedules]);
 
-  async function handleGenerate(days: number) {
+  async function handleGenerate(mode: "this-week" | "next-week" | "next-30" | "next-90") {
     setGenerating(true);
     try {
-      const startDate = new Date();
-      const endDate = addDays(startDate, days);
+      let startDate: Date;
+      let endDate: Date;
+
+      const now = new Date();
+      if (mode === "this-week") {
+        startDate = startOfWeek(now, { weekStartsOn: 1 });
+        endDate = endOfWeek(now, { weekStartsOn: 1 });
+      } else if (mode === "next-week") {
+        const nextWeek = addWeeks(now, 1);
+        startDate = startOfWeek(nextWeek, { weekStartsOn: 1 });
+        endDate = endOfWeek(nextWeek, { weekStartsOn: 1 });
+      } else if (mode === "next-30") {
+        startDate = now;
+        endDate = addDays(now, 30);
+      } else {
+        startDate = now;
+        endDate = addDays(now, 90);
+      }
 
       const res = await fetch("/api/schedules/generate", {
         method: "POST",
@@ -194,15 +211,18 @@ export default function CalendarPage() {
                     Generate schedule for:
                   </p>
                   <div className="space-y-1.5">
-                    {[
-                      { label: "Next 7 Days", days: 7 },
-                      { label: "Next 30 Days", days: 30 },
-                      { label: "Next 90 Days", days: 90 },
-                    ].map((opt) => (
+                    {(
+                      [
+                        { label: "This Week (Mon - Sun)", mode: "this-week" },
+                        { label: "Next Week (Mon - Sun)", mode: "next-week" },
+                        { label: "Next 30 Days", mode: "next-30" },
+                        { label: "Next 90 Days", mode: "next-90" },
+                      ] as const
+                    ).map((opt) => (
                       <button
-                        key={opt.days}
+                        key={opt.mode}
                         onClick={() => {
-                          handleGenerate(opt.days);
+                          handleGenerate(opt.mode);
                           setShowGenerate(false);
                         }}
                         disabled={generating}

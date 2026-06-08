@@ -40,10 +40,6 @@ export default function DashboardPage() {
   const [activity, setActivity] = useState<Array<Record<string, unknown>>>([]);
   const [loading, setLoading] = useState(true);
 
-  useEffect(() => {
-    fetchDashboard();
-  }, []);
-
   async function fetchDashboard() {
     try {
       const res = await fetch("/api/dashboard");
@@ -58,6 +54,11 @@ export default function DashboardPage() {
       setLoading(false);
     }
   }
+
+  useEffect(() => {
+    // eslint-disable-next-line react-hooks/set-state-in-effect
+    fetchDashboard();
+  }, []);
 
   if (loading) {
     return (

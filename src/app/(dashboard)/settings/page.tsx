@@ -46,10 +46,6 @@ export default function SettingsPage() {
   const [saving, setSaving] = useState(false);
   const [saved, setSaved] = useState(false);
 
-  useEffect(() => {
-    fetchSettings();
-  }, []);
-
   async function fetchSettings() {
     try {
       const res = await fetch("/api/settings");
@@ -69,6 +65,11 @@ export default function SettingsPage() {
       setLoading(false);
     }
   }
+
+  useEffect(() => {
+    // eslint-disable-next-line react-hooks/set-state-in-effect
+    fetchSettings();
+  }, []);
 
   async function handleSave() {
     setSaving(true);
