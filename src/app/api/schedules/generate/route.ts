@@ -12,7 +12,7 @@ export async function POST(request: Request) {
     }
 
     const body = await request.json();
-    const { startDate, endDate } = body;
+    const { startDate, endDate, platformId } = body;
 
     if (!startDate || !endDate) {
       return NextResponse.json(
@@ -24,7 +24,8 @@ export async function POST(request: Request) {
     const result = await generateSchedule(
       session.user.clientId,
       new Date(startDate),
-      new Date(endDate)
+      new Date(endDate),
+      platformId
     );
 
     // Create notification

@@ -25,15 +25,16 @@ export async function PUT(
       return NextResponse.json({ error: "Schedule not found" }, { status: 404 });
     }
 
-    // If moving to new date/platform, validate rules
-    if (body.scheduledDate || body.platformId) {
+    // If moving to new date/platform/content, validate rules
+    if (body.scheduledDate || body.platformId || body.contentDbId) {
       const newDate = body.scheduledDate
         ? new Date(body.scheduledDate)
         : existing.scheduledDate;
       const newPlatformId = body.platformId || existing.platformId;
+      const newContentDbId = body.contentDbId || existing.contentDbId;
 
       const validation = await validateScheduleEntry(
-        existing.contentDbId,
+        newContentDbId,
         newPlatformId,
         newDate,
         id // exclude this schedule from conflict check
@@ -48,6 +49,7 @@ export async function PUT(
     if (body.scheduledDate) updateData.scheduledDate = new Date(body.scheduledDate);
     if (body.scheduledTime) updateData.scheduledTime = body.scheduledTime;
     if (body.platformId) updateData.platformId = body.platformId;
+    if (body.contentDbId) updateData.contentDbId = body.contentDbId;
     if (body.status) updateData.status = body.status;
 
     const schedule = await prisma.schedule.update({

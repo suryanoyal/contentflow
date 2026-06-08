@@ -28,7 +28,8 @@ interface GenerateResult {
 export async function generateSchedule(
   clientId: string,
   startDate: Date,
-  endDate: Date
+  endDate: Date,
+  platformId?: string
 ): Promise<GenerateResult> {
   // Fetch client settings
   const client = await prisma.client.findUnique({
@@ -41,18 +42,22 @@ export async function generateSchedule(
 
   // Fetch active platforms with their content type rules and posting slots
   const platforms = await prisma.platform.findMany({
-    where: { clientId, isActive: true },
+    where: { 
+      clientId, 
+      isActive: true,
+      ...(platformId ? { id: platformId } : {})
+    },
     include: {
       contentTypes: true,
       postingSlots: { where: { isActive: true }, orderBy: { time: "asc" } },
     },
   });
 
-  // Fetch all READY and SCHEDULED content for this client
+  // Fetch all READY, SCHEDULED, and POSTED content for this client
   const allContent = await prisma.content.findMany({
     where: {
       clientId,
-      status: { in: ["READY", "SCHEDULED"] },
+      status: { in: ["READY", "SCHEDULED", "POSTED"] },
     },
     orderBy: [
       { usageCount: "asc" },
@@ -185,21 +190,27 @@ export async function generateSchedule(
       })),
     });
 
-    // Update content usage counts and status
-    const contentUsage = new Map<string, number>();
+    // Update content usage counts, lastPostedDate, and status
+    const contentUpdates = new Map<string, { count: number; maxDate: Date }>();
     for (const entry of entries) {
-      contentUsage.set(
-        entry.contentDbId,
-        (contentUsage.get(entry.contentDbId) || 0) + 1
-      );
+      const existing = contentUpdates.get(entry.contentDbId);
+      if (!existing) {
+        contentUpdates.set(entry.contentDbId, { count: 1, maxDate: entry.scheduledDate });
+      } else {
+        existing.count += 1;
+        if (entry.scheduledDate.getTime() > existing.maxDate.getTime()) {
+          existing.maxDate = entry.scheduledDate;
+        }
+      }
     }
 
-    for (const [contentId, count] of contentUsage) {
+    for (const [contentId, updateInfo] of contentUpdates) {
       await prisma.content.update({
         where: { id: contentId },
         data: {
-          usageCount: { increment: count },
+          usageCount: { increment: updateInfo.count },
           status: "SCHEDULED",
+          lastPostedDate: updateInfo.maxDate,
         },
       });
     }
@@ -309,8 +320,8 @@ export async function validateScheduleEntry(
     return { valid: false, error: "Archived content cannot be scheduled" };
   }
 
-  if (content.status !== "READY" && content.status !== "SCHEDULED") {
-    return { valid: false, error: "Only Ready or Scheduled content can be scheduled" };
+  if (content.status !== "READY" && content.status !== "SCHEDULED" && content.status !== "POSTED") {
+    return { valid: false, error: "Only Ready, Scheduled, or Posted content can be scheduled" };
   }
 
   // Rule 3: Check platform content type rules
