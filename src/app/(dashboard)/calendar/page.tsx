@@ -1,7 +1,7 @@
 /* eslint-disable @typescript-eslint/no-explicit-any */
 "use client";
  
-import React, { useState, useEffect, useCallback, useMemo } from "react";
+import React, { useState, useEffect, useCallback, useMemo, useRef } from "react";
 import dynamic from "next/dynamic";
 import { motion, AnimatePresence } from "framer-motion";
 import {
@@ -167,13 +167,13 @@ export default function CalendarPage() {
   // State for Auto Schedule platform filter selection
   const [autoSchedulePlatformId, setAutoSchedulePlatformId] = useState<string>("all");
  
-  // Date range tracking to re-fetch correctly
-  const [currentRange, setCurrentRange] = useState<{ start: string; end: string } | null>(null);
+  // Date range tracking to re-fetch correctly without triggering re-render cascades
+  const rangeRef = useRef<{ start: string; end: string } | null>(null);
  
   const fetchSchedules = useCallback(async (start?: string, end?: string) => {
     try {
-      const activeStart = start || currentRange?.start;
-      const activeEnd = end || currentRange?.end;
+      const activeStart = start || rangeRef.current?.start;
+      const activeEnd = end || rangeRef.current?.end;
       
       const params = new URLSearchParams();
       if (activeStart) params.set("start", activeStart);
@@ -212,7 +212,7 @@ export default function CalendarPage() {
         setEvents(calEvents);
         
         if (start && end) {
-          setCurrentRange({ start, end });
+          rangeRef.current = { start, end };
         }
       }
     } catch (error) {
@@ -220,7 +220,7 @@ export default function CalendarPage() {
     } finally {
       setLoading(false);
     }
-  }, [currentRange]);
+  }, []);
  
   const loadFormData = useCallback(async () => {
     try {
@@ -505,6 +505,12 @@ export default function CalendarPage() {
           </p>
         </div>
         <div className="flex items-center gap-2">
+          {loading && events.length > 0 && (
+            <div className="flex items-center gap-1.5 text-xs text-[var(--color-text-tertiary)] bg-zinc-900/40 px-2.5 py-1.5 rounded-lg border border-[var(--color-border-subtle)] transition-all">
+              <Loader2 className="w-3.5 h-3.5 animate-spin text-[var(--color-accent)]" />
+              <span className="font-medium">Syncing...</span>
+            </div>
+          )}
           <div className="relative">
             <Button
               onClick={() => setShowGenerate(!showGenerate)}
