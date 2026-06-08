@@ -5,12 +5,12 @@ import { registerSchema } from "@/lib/validations";
 import { getPlatformColor, getPlatformIcon } from "@/lib/utils";
 
 const DEFAULT_PLATFORMS = [
-  { name: "Instagram", icon: "instagram", color: "#E4405F" },
-  { name: "Facebook", icon: "facebook", color: "#1877F2" },
-  { name: "LinkedIn", icon: "linkedin", color: "#0A66C2" },
-  { name: "X", icon: "twitter", color: "#000000" },
-  { name: "TikTok", icon: "music", color: "#00F2EA" },
-  { name: "YouTube", icon: "youtube", color: "#FF0000" },
+  { name: "Instagram", icon: "instagram", color: "#E4405F", slots: ["09:00", "18:00"] },
+  { name: "Facebook", icon: "facebook", color: "#1877F2", slots: ["19:00"] },
+  { name: "LinkedIn", icon: "linkedin", color: "#0A66C2", slots: ["10:00"] },
+  { name: "X", icon: "twitter", color: "#000000", slots: ["12:00", "17:00"] },
+  { name: "TikTok", icon: "music", color: "#00F2EA", slots: ["20:00"] },
+  { name: "YouTube", icon: "youtube", color: "#FF0000", slots: ["14:00"] },
 ];
 
 const DEFAULT_CONTENT_TYPES = [
@@ -72,6 +72,9 @@ export async function POST(request: Request) {
                     { contentType: "VIDEO", isAllowed: true },
                   ]
                 : DEFAULT_CONTENT_TYPES,
+            },
+            postingSlots: {
+              create: p.slots.map((time) => ({ time })),
             },
           })),
         },

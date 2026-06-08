@@ -1,6 +1,5 @@
 import prisma from "./prisma";
-import { ContentStatus, ScheduleStatus } from "@/types/prisma";
-import { addDays, isSameDay, differenceInDays } from "date-fns";
+import { addDays } from "date-fns";
 
 interface ScheduleEntry {
   contentDbId: string;
@@ -49,11 +48,11 @@ export async function generateSchedule(
     },
   });
 
-  // Fetch all READY content for this client
+  // Fetch all READY and SCHEDULED content for this client
   const allContent = await prisma.content.findMany({
     where: {
       clientId,
-      status: "READY",
+      status: { in: ["READY", "SCHEDULED"] },
     },
     orderBy: [
       { usageCount: "asc" },
@@ -62,11 +61,17 @@ export async function generateSchedule(
     ],
   });
 
+  // Normalize startDate and endDate to midnight UTC
+  const start = new Date(startDate);
+  start.setUTCHours(0, 0, 0, 0);
+  const end = new Date(endDate);
+  end.setUTCHours(0, 0, 0, 0);
+
   // Fetch existing schedules in the date range
   const existingSchedules = await prisma.schedule.findMany({
     where: {
       clientId,
-      scheduledDate: { gte: startDate, lte: endDate },
+      scheduledDate: { gte: start, lte: end },
       status: { not: "CANCELLED" },
     },
   });
@@ -74,7 +79,7 @@ export async function generateSchedule(
   // Track which content is used on which dates (content ID -> Set of date strings)
   const usedContentDates = new Map<string, Set<string>>();
   for (const schedule of existingSchedules) {
-    const dateKey = schedule.scheduledDate.toISOString().split("T")[0];
+    const dateKey = new Date(schedule.scheduledDate).toISOString().split("T")[0];
     if (!usedContentDates.has(schedule.contentDbId)) {
       usedContentDates.set(schedule.contentDbId, new Set());
     }
@@ -86,17 +91,18 @@ export async function generateSchedule(
   let created = 0;
   let skipped = 0;
 
-  // Iterate through each date in the range
-  const totalDays = differenceInDays(endDate, startDate) + 1;
+  // Iterate through each date in the range (timezone-independent calculation)
+  const totalDays = Math.round((end.getTime() - start.getTime()) / (1000 * 60 * 60 * 24)) + 1;
   
   for (let dayOffset = 0; dayOffset < totalDays; dayOffset++) {
-    const currentDate = addDays(startDate, dayOffset);
+    const currentDate = addDays(start, dayOffset);
+    currentDate.setUTCHours(0, 0, 0, 0);
     const dateKey = currentDate.toISOString().split("T")[0];
 
     // For each platform
     for (const platform of platforms) {
-      // Get allowed content types for this platform on this specific day of the week
-      const currentDay = currentDate.getDay(); // 0 (Sun) to 6 (Sat)
+      // Get allowed content types for this platform on this specific day of the week (UTC)
+      const currentDay = currentDate.getUTCDay(); // 0 (Sun) to 6 (Sat)
       const allowedTypes = platform.contentTypes
         .filter((ct) => {
           if (!ct.isAllowed) return false;
@@ -110,12 +116,12 @@ export async function generateSchedule(
 
       // For each posting slot
       for (const slot of platform.postingSlots) {
-        // Check if this slot already has a schedule
+        // Check if this slot already has a schedule (compare UTC midnight timestamps)
         const slotTaken = existingSchedules.some(
           (s) =>
             s.platformId === platform.id &&
             s.scheduledTime === slot.time &&
-            isSameDay(s.scheduledDate, currentDate)
+            new Date(s.scheduledDate).getTime() === currentDate.getTime()
         );
 
         if (slotTaken) {
@@ -150,6 +156,11 @@ export async function generateSchedule(
           }
           usedContentDates.get(bestContent.id)!.add(dateKey);
 
+          // Update in-memory state of the selected content to rotate it in subsequent slots/days
+          bestContent.usageCount += 1;
+          bestContent.lastPostedDate = currentDate;
+          bestContent.status = "SCHEDULED";
+
           created++;
         } else {
           conflicts.push(
@@ -174,7 +185,7 @@ export async function generateSchedule(
       })),
     });
 
-    // Update content usage counts
+    // Update content usage counts and status
     const contentUsage = new Map<string, number>();
     for (const entry of entries) {
       contentUsage.set(
@@ -235,10 +246,12 @@ function findBestContent(
   }
 
   // Priority 2 & 3: Sort by oldest lastPostedDate, then lowest usageCount
-  // Also check cooldown for recycling
+  // Also check cooldown for recycling (using UTC timestamp comparisons)
   const recycleEligible = eligible.filter((c) => {
     if (!c.lastPostedDate) return true;
-    return differenceInDays(currentDate, c.lastPostedDate) >= cooldownDays;
+    const diffInMs = currentDate.getTime() - new Date(c.lastPostedDate).getTime();
+    const diffInDays = Math.floor(diffInMs / (1000 * 60 * 60 * 24));
+    return diffInDays >= cooldownDays;
   });
 
   if (recycleEligible.length > 0) {
@@ -247,7 +260,7 @@ function findBestContent(
       if (!a.lastPostedDate && !b.lastPostedDate) return a.usageCount - b.usageCount;
       if (!a.lastPostedDate) return -1;
       if (!b.lastPostedDate) return 1;
-      const dateDiff = a.lastPostedDate.getTime() - b.lastPostedDate.getTime();
+      const dateDiff = new Date(a.lastPostedDate).getTime() - new Date(b.lastPostedDate).getTime();
       if (dateDiff !== 0) return dateDiff;
       return a.usageCount - b.usageCount;
     });
@@ -322,7 +335,7 @@ export async function validateScheduleEntry(
       };
     }
 
-    const currentDay = scheduledDate.getDay(); // 0 (Sun) to 6 (Sat)
+    const currentDay = scheduledDate.getUTCDay(); // 0 (Sun) to 6 (Sat)
     const allowedDaysStr = typeRule.allowedDays || "0,1,2,3,4,5,6";
     const allowedDaysArray = allowedDaysStr.split(",").filter(Boolean).map(Number);
     if (!allowedDaysArray.includes(currentDay)) {
